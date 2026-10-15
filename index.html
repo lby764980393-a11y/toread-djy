@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>报价单 Quotation</title>
+<style>
+  :root { --accent: #1d6f42; --line: #d0d5dc; --ink: #1f2933; --muted: #6b7280; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #eef1f4; color: var(--ink);
+         font-family: "Microsoft YaHei", "Leelawadee UI", "Noto Sans Thai", sans-serif; font-size: 14px; }
+  [data-i18n] { white-space: pre-line; }
+
+  /* 顶部工具栏（打印时隐藏） */
+  .toolbar { position: sticky; top: 0; z-index: 10; background: #fff; border-bottom: 1px solid var(--line);
+             padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+  .toolbar label { display: flex; gap: 6px; align-items: center; }
+  .toolbar select, .toolbar input[type=number] { padding: 4px 6px; border: 1px solid var(--line); border-radius: 4px; font: inherit; }
+  .toolbar input[type=number] { width: 70px; }
+  .btn { padding: 6px 14px; border: 1px solid var(--accent); background: var(--accent); color: #fff;
+         border-radius: 4px; cursor: pointer; font: inherit; }
+  .btn.ghost { background: #fff; color: var(--accent); }
+
+  /* A4 纸 */
+  .page { width: 210mm; min-height: 297mm; margin: 20px auto; padding: 15mm; background: #fff;
+          box-shadow: 0 2px 10px rgba(0,0,0,.08); }
+  .f { width: 100%; border: none; border-bottom: 1px dashed var(--line); background: transparent;
+       font: inherit; color: inherit; padding: 2px 0; }
+  .f:focus { outline: none; border-bottom-color: var(--accent); }
+
+  /* 抬头 */
+  .head { display: flex; justify-content: space-between; gap: 24px;
+          border-bottom: 3px solid var(--accent); padding-bottom: 12px; margin-bottom: 16px; }
+  .seller { flex: 1; }
+  .seller .big { font-size: 20px; font-weight: bold; }
+  .meta { width: 250px; }
+  .meta h1 { margin: 0 0 8px; font-size: 22px; line-height: 1.25; color: var(--accent); text-align: right; }
+  .kv { width: 100%; border-collapse: collapse; }
+  .kv th { text-align: left; font-weight: normal; font-size: 12px; color: var(--muted); padding: 3px 8px 3px 0; }
+  .kv input { text-align: right; }
+
+  /* 客户信息 */
+  .section-title { margin: 0 0 8px; font-size: 13px; font-weight: bold; color: var(--accent); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; margin-bottom: 18px; }
+  .field { display: flex; gap: 8px; align-items: flex-end; }
+  .field span { min-width: 80px; font-size: 12px; color: var(--muted); }
+
+  /* 商品表格 */
+  .items-wrap { overflow-x: auto; }
+  .items { width: 100%; border-collapse: collapse; }
+  .items th { background: var(--accent); color: #fff; font-weight: normal; font-size: 12px; padding: 6px; line-height: 1.3;
+              -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .items td { border-bottom: 1px solid var(--line); padding: 4px 6px; }
+  .items .f { border-bottom-color: transparent; }
+  .items .f:hover, .items .f:focus { border-bottom-color: var(--accent); }
+  .c { text-align: center; }
+  .num { text-align: right; }
+  .del { border: none; background: none; color: #c0392b; font-size: 18px; cursor: pointer; }
+  #addRow { margin-top: 8px; }
+
+  /* 备注 + 合计 */
+  .bottom { display: flex; gap: 24px; margin-top: 18px; align-items: flex-start; }
+  .notes { flex: 1; }
+  .notes textarea { width: 100%; min-height: 90px; border: 1px dashed var(--line); padding: 6px; font: inherit; resize: vertical; }
+  .totals { width: 290px; border-collapse: collapse; }
+  .totals th { text-align: left; font-weight: normal; font-size: 12px; color: var(--muted); padding: 5px 0; }
+  .totals td { text-align: right; padding: 5px 0; white-space: nowrap; }
+  .totals .grand th, .totals .grand td { border-top: 2px solid var(--ink); font-weight: bold; font-size: 15px; color: var(--ink); }
+  .rate-note { font-size: 11px; color: var(--muted); }
+
+  /* 签字栏 */
+  .sign { display: flex; gap: 40px; margin-top: 70px; }
+  .sign div { flex: 1; border-top: 1px solid var(--ink); padding-top: 6px; text-align: center; font-size: 12px; color: var(--muted); }
+
+  /* 手机屏幕 */
+  @media (max-width: 820px) {
+    .page { width: auto; min-height: 0; margin: 12px; padding: 16px; }
+    .head, .bottom { flex-direction: column; }
+    .meta, .totals { width: 100%; }
+    .grid { grid-template-columns: 1fr; }
+  }
+
+  /* 打印 */
+  @media print {
+    @page { size: A4; margin: 12mm; }
+    body { background: #fff; }
+    .toolbar, .no-print { display: none !important; }
+    .page { width: auto; min-height: 0; margin: 0; padding: 0; box-shadow: none; }
+    .f, .notes textarea { border-color: transparent !important; }
+    .f::placeholder, textarea::placeholder { color: transparent; }
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type=date]::-webkit-calendar-picker-indicator { display: none; }
+    .items tr { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== 工具栏 ===== -->
+<div class="toolbar">
+  <label>语言
+    <select id="lang" data-save>
+      <option value="zh-th">中文 + ไทย</option>
+      <option value="zh">中文</option>
+      <option value="th">ภาษาไทย</option>
+      <option value="en">English</option>
+    </select>
+  </label>
+  <label>报价币种
+    <select id="currency" data-save>
+      <option value="THB">泰铢 THB ฿</option>
+      <option value="CNY">人民币 CNY ¥</option>
+    </select>
+  </label>
+  <label>汇率 1 CNY = <input id="rate" type="number" step="0.01" value="4.60" data-save> THB</label>
+  <label><input id="showConv" type="checkbox" checked data-save> 显示折合</label>
+  <label><input id="vatOn" type="checkbox" checked data-save> 增值税</label>
+  <label><input id="vatRate" type="number" step="0.1" value="7" data-save> %</label>
+  <button class="btn ghost" id="newQuote">新报价单</button>
+  <button class="btn" id="printBtn">打印 / 存PDF</button>
+</div>
+
+<!-- ===== A4 报价单 ===== -->
+<div class="page">
+  <div class="head">
+    <div class="seller">
+      <input class="f big" id="sellerName" value="都江堰探路者户外" data-save>
+      <input class="f" id="sellerAddr" data-i18n-ph="addr" data-save>
+      <input class="f" id="sellerPhone" data-i18n-ph="phone" data-save>
+      <input class="f" id="sellerTax" data-i18n-ph="taxId" data-save>
+    </div>
+    <div class="meta">
+      <h1 data-i18n="title"></h1>
+      <table class="kv">
+        <tr><th data-i18n="quoteNo"></th><td><input class="f" id="quoteNo" data-save></td></tr>
+        <tr><th data-i18n="date"></th><td><input class="f" id="date" type="date" data-save></td></tr>
+        <tr><th data-i18n="validUntil"></th><td><input class="f" id="validUntil" type="date" data-save></td></tr>
+      </table>
+    </div>
+  </div>
+
+  <p class="section-title" data-i18n="billTo"></p>
+  <div class="grid">
+    <label class="field"><span data-i18n="clientName"></span><input class="f" id="clientName" data-save></label>
+    <label class="field"><span data-i18n="phone"></span><input class="f" id="clientPhone" data-save></label>
+    <label class="field"><span data-i18n="addr"></span><input class="f" id="clientAddr" data-save></label>
+    <label class="field"><span data-i18n="taxId"></span><input class="f" id="clientTax" data-save></label>
+  </div>
+
+  <div class="items-wrap">
+    <table class="items">
+      <thead><tr>
+        <th style="width:44px" data-i18n="colNo"></th>
+        <th data-i18n="colItem"></th>
+        <th style="width:70px" data-i18n="colQty"></th>
+        <th style="width:60px" data-i18n="colUnit"></th>
+        <th style="width:100px" data-i18n="colPrice"></th>
+        <th style="width:110px" data-i18n="colAmount"></th>
+        <th class="no-print" style="width:30px"></th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <button class="btn ghost no-print" id="addRow">+ 添加一行</button>
+
+  <div class="bottom">
+    <div class="notes">
+      <p class="section-title" data-i18n="notes"></p>
+      <textarea id="notes" data-save></textarea>
+    </div>
+    <table class="totals">
+      <tr><th data-i18n="subtotal"></th><td id="subtotal"></td></tr>
+      <tr id="vatRow"><th><span data-i18n="vat"></span> <span id="vatPct"></span></th><td id="vat"></td></tr>
+      <tr class="grand"><th data-i18n="grand"></th><td id="grand"></td></tr>
+      <tr id="convRow"><th><span data-i18n="converted"></span><div class="rate-note" id="rateNote"></div></th><td id="conv"></td></tr>
+    </table>
+  </div>
+
+  <div class="sign">
+    <div data-i18n="signClient"></div>
+    <div data-i18n="signCompany"></div>
+  </div>
+</div>
+
+<script>
+// ===== 1. 三种语言的文字 =====
+const I18N = {
+  zh: { title:"报价单", quoteNo:"报价单号", date:"日期", validUntil:"有效期至", billTo:"客户信息",
+        clientName:"客户名称", addr:"地址", phone:"电话", taxId:"税号",
+        colNo:"序号", colItem:"品名 / 描述", colQty:"数量", colUnit:"单位", colPrice:"单价", colAmount:"金额",
+        itemPh:"商品名称", subtotal:"小计", vat:"增值税", grand:"总计", converted:"折合",
+        notes:"备注 / 付款条件", signClient:"客户确认签字", signCompany:"报价方签章" },
+  th: { title:"ใบเสนอราคา", quoteNo:"เลขที่", date:"วันที่", validUntil:"ยืนราคาถึง", billTo:"ข้อมูลลูกค้า",
+        clientName:"ชื่อลูกค้า", addr:"ที่อยู่", phone:"โทรศัพท์", taxId:"เลขประจำตัวผู้เสียภาษี",
+        colNo:"ลำดับ", colItem:"รายการ", colQty:"จำนวน", colUnit:"หน่วย", colPrice:"ราคาต่อหน่วย", colAmount:"จำนวนเงิน",
+        itemPh:"ชื่อสินค้า", subtotal:"รวมเป็นเงิน", vat:"ภาษีมูลค่าเพิ่ม", grand:"จำนวนเงินรวมทั้งสิ้น", converted:"เทียบเท่า",
+        notes:"หมายเหตุ / เงื่อนไขการชำระเงิน", signClient:"ลงชื่อลูกค้า", signCompany:"ผู้เสนอราคา" },
+  en: { title:"QUOTATION", quoteNo:"Quote No.", date:"Date", validUntil:"Valid Until", billTo:"Bill To",
+        clientName:"Client", addr:"Address", phone:"Phone", taxId:"Tax ID",
+        colNo:"No.", colItem:"Description", colQty:"Qty", colUnit:"Unit", colPrice:"Unit Price", colAmount:"Amount",
+        itemPh:"Item name", subtotal:"Subtotal", vat:"VAT", grand:"Grand Total", converted:"Equivalent",
+        notes:"Notes / Payment Terms", signClient:"Customer Signature", signCompany:"Authorized Signature" }
+};
+
+// 第一次打开时显示的示例商品
+const SAMPLE = [
+  { name: "探路者冲锋衣 Toread Jacket", qty: 2, unit: "件", price: 3500 },
+  { name: "登山杖 Trekking Pole",       qty: 4, unit: "根", price: 650 }
+];
+
+const $ = id => document.getElementById(id);
+const rowsEl = $("rows");
+const STORE_KEY = "toread-quotation";
+
+// ===== 2. 切换语言 =====
+function t(key, sep) {
+  const lang = $("lang").value;
+  if (lang === "zh-th") return I18N.zh[key] + (sep || "\n") + I18N.th[key];
+  return I18N[lang][key];
+}
+function applyLang() {
+  document.querySelectorAll("[data-i18n]").forEach(el => el.textContent = t(el.dataset.i18n));
+  document.querySelectorAll("[data-i18n-ph]").forEach(el => el.placeholder = t(el.dataset.i18nPh, " / "));
+  const lang = $("lang").value;
+  document.documentElement.lang = lang === "zh-th" ? "zh" : lang;
+}
+
+// ===== 3. 日期和单号 =====
+function ymd(d) {
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+function setNewQuoteInfo() {
+  const now = new Date();
+  const valid = new Date();
+  valid.setDate(valid.getDate() + 15);   // 默认有效期 15 天
+  $("date").value = ymd(now);
+  $("validUntil").value = ymd(valid);
+  $("quoteNo").value = "QT-" + ymd(now).replaceAll("-", "") + "-" +
+                       String(now.getHours()).padStart(2, "0") + String(now.getMinutes()).padStart(2, "0");
+}
+
+// ===== 4. 添加商品行 =====
+function addRow(item = {}) {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td class="c idx"></td>
+    <td><input class="f" data-k="name" data-i18n-ph="itemPh"></td>
+    <td><input class="f num" data-k="qty" type="number" min="0" step="any"></td>
+    <td><input class="f c" data-k="unit"></td>
+    <td><input class="f num" data-k="price" type="number" min="0" step="any"></td>
+    <td class="num amount"></td>
+    <td class="c no-print"><button class="del" title="删除这一行">×</button></td>`;
+  tr.querySelector('[data-k="name"]').value  = item.name  || "";
+  tr.querySelector('[data-k="qty"]').value   = item.qty   ?? 1;
+  tr.querySelector('[data-k="unit"]').value  = item.unit  || "";
+  tr.querySelector('[data-k="price"]').value = item.price ?? "";
+  tr.querySelector('[data-k="name"]').placeholder = t("itemPh", " / ");
+  tr.querySelector(".del").addEventListener("click", () => { tr.remove(); update(); });
+  rowsEl.appendChild(tr);
+}
+
+// ===== 5. 计算合计 =====
+function money(n) {
+  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function update() {
+  const cur = $("currency").value;
+  const sym = cur === "THB" ? "฿ " : "¥ ";
+  let subtotal = 0;
+
+  [...rowsEl.rows].forEach((tr, i) => {
+    const qty   = Number(tr.querySelector('[data-k="qty"]').value) || 0;
+    const price = Number(tr.querySelector('[data-k="price"]').value) || 0;
+    const amount = qty * price;
+    tr.querySelector(".idx").textContent = i + 1;
+    tr.querySelector(".amount").textContent = money(amount);
+    subtotal += amount;
+  });
+
+  const vatOn = $("vatOn").checked;
+  const vatRate = Number($("vatRate").value) || 0;
+  const vat = vatOn ? subtotal * vatRate / 100 : 0;
+  const grand = subtotal + vat;
+
+  $("subtotal").textContent = sym + money(subtotal);
+  $("vatRow").hidden = !vatOn;
+  $("vatPct").textContent = vatRate + "%";
+  $("vat").textContent = sym + money(vat);
+  $("grand").textContent = sym + money(grand);
+
+  const rate = Number($("rate").value) || 0;
+  $("convRow").hidden = !($("showConv").checked && rate > 0);
+  if (rate > 0) {
+    $("conv").textContent = cur === "THB" ? "¥ " + money(grand / rate) : "฿ " + money(grand * rate);
+    $("rateNote").textContent = "1 CNY = " + rate + " THB";
+  }
+  save();
+}
+
+// ===== 6. 自动保存（关掉网页再打开，内容还在） =====
+function save() {
+  const data = { fields: {}, rows: [] };
+  document.querySelectorAll("[data-save]").forEach(el => {
+    data.fields[el.id] = el.type === "checkbox" ? el.checked : el.value;
+  });
+  [...rowsEl.rows].forEach(tr => {
+    const r = {};
+    tr.querySelectorAll("[data-k]").forEach(inp => r[inp.dataset.k] = inp.value);
+    data.rows.push(r);
+  });
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch (e) {}
+}
+function load() {
+  try { return JSON.parse(localStorage.getItem(STORE_KEY)); } catch (e) { return null; }
+}
+
+// ===== 7. 按钮和事件 =====
+document.addEventListener("input", update);
+document.addEventListener("change", update);
+$("lang").addEventListener("change", applyLang);
+
+$("addRow").addEventListener("click", () => {
+  addRow();
+  update();
+  rowsEl.lastElementChild.querySelector("input").focus();
+});
+
+$("newQuote").addEventListener("click", () => {
+  if (!confirm("开始新报价单？客户和商品会清空，公司信息和备注保留。")) return;
+  ["clientName", "clientPhone", "clientAddr", "clientTax"].forEach(id => $(id).value = "");
+  rowsEl.innerHTML = "";
+  addRow();
+  setNewQuoteInfo();
+  update();
+});
+
+$("printBtn").addEventListener("click", () => {
+  const old = document.title;
+  document.title = $("quoteNo").value || old;   // 存 PDF 时，文件名就是报价单号
+  window.print();
+  document.title = old;
+});
+
+// ===== 8. 打开网页时执行 =====
+const saved = load();
+if (saved) {
+  Object.entries(saved.fields).forEach(([id, v]) => {
+    const el = $(id);
+    if (!el) return;
+    if (el.type === "checkbox") el.checked = v; else el.value = v;
+  });
+  saved.rows.forEach(addRow);
+} else {
+  setNewQuoteInfo();
+  SAMPLE.forEach(addRow);
+}
+if (rowsEl.rows.length === 0) addRow();
+applyLang();
+update();
+</script>
+</body>
+</html>
